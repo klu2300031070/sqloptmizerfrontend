@@ -72,14 +72,13 @@ function Login({ setUser }) {
     }
   };
 
-  const loginWithGoogle = () => {
+  const loginWithCognito = () => {
     const loginUrl =
       `${COGNITO_DOMAIN}/oauth2/authorize` +
       `?response_type=code` +
       `&client_id=${CLIENT_ID}` +
       `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
-      `&scope=${encodeURIComponent("openid email profile")}` +
-      `&identity_provider=Google`;
+      `&scope=${encodeURIComponent("openid email profile")}`;
 
     window.location.href = loginUrl;
   };
@@ -105,10 +104,6 @@ function Login({ setUser }) {
               backdropFilter: "blur(15px)",
               backgroundColor: "rgba(30, 41, 59, 0.85)",
               textAlign: "center",
-              transition: "0.4s",
-              "&:hover": {
-                transform: "scale(1.02)",
-              },
             }}
           >
             <CardContent>
@@ -117,14 +112,14 @@ function Login({ setUser }) {
               </Typography>
 
               <Typography variant="body1" sx={{ mb: 3, color: "#cbd5e1" }}>
-                Sign in with Google to continue
+                Sign in to continue
               </Typography>
 
               <Box display="flex" justifyContent="center">
                 <Button
                   variant="contained"
                   size="large"
-                  onClick={loginWithGoogle}
+                  onClick={loginWithCognito}
                   disabled={loading}
                   sx={{
                     px: 4,
@@ -134,7 +129,7 @@ function Login({ setUser }) {
                     textTransform: "none",
                   }}
                 >
-                  {loading ? "Signing in..." : "Sign in with Google"}
+                  {loading ? "Signing in..." : "Sign in"}
                 </Button>
               </Box>
 
