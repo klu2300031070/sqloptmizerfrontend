@@ -14,21 +14,63 @@ import {
 
 const CLIENT_ID = "2nvo1g2bkegtrua3tir9q4bsng";
 const REDIRECT_URI = "https://main.d30lc4vxybk6pg.amplifyapp.com/";
-const COGNITO_DOMAIN = "https://us-east-1wvpsr47h7.auth.us-east-1.amazoncognito.com";
+const COGNITO_DOMAIN =
+  "https://us-east-1wvpsr47h7.auth.us-east-1.amazoncognito.com";
+
+function base64UrlEncode(arrayBuffer) {
+  return btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function generateRandomString(length = 64) {
+  const charset =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  const randomValues = new Uint8Array(length);
+  window.crypto.getRandomValues(randomValues);
+
+  let result = "";
+  randomValues.forEach((value) => {
+    result += charset[value % charset.length];
+  });
+  return result;
+}
+
+async function generateCodeChallenge(codeVerifier) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(codeVerifier);
+  const digest = await window.crypto.subtle.digest("SHA-256", data);
+  return base64UrlEncode(digest);
+}
 
 function Login({ setUser }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get("code");
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const returnedState = params.get("state");
+    const savedState = sessionStorage.getItem("cognito_auth_state");
+    const codeVerifier = sessionStorage.getItem("pkce_code_verifier");
 
-    if (code) {
-      exchangeCodeForToken(code);
+    if (!code) return;
+
+    if (!returnedState || !savedState || returnedState !== savedState) {
+      setError("Invalid login state. Please try signing in again.");
+      return;
     }
+
+    if (!codeVerifier) {
+      setError("Missing PKCE verifier. Please try signing in again.");
+      return;
+    }
+
+    exchangeCodeForToken(code, codeVerifier);
   }, []);
 
-  const exchangeCodeForToken = async (code) => {
+  const exchangeCodeForToken = async (code, codeVerifier) => {
     setLoading(true);
     setError("");
 
@@ -38,6 +80,7 @@ function Login({ setUser }) {
         client_id: CLIENT_ID,
         code,
         redirect_uri: REDIRECT_URI,
+        code_verifier: codeVerifier,
       });
 
       const response = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
@@ -51,12 +94,15 @@ function Login({ setUser }) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error_description || "Token exchange failed.");
+        throw new Error(data.error_description || data.error || "Token exchange failed.");
       }
 
       localStorage.setItem("access_token", data.access_token || "");
       localStorage.setItem("id_token", data.id_token || "");
       localStorage.setItem("refresh_token", data.refresh_token || "");
+
+      sessionStorage.removeItem("pkce_code_verifier");
+      sessionStorage.removeItem("cognito_auth_state");
 
       setUser({
         isAuthenticated: true,
@@ -72,15 +118,32 @@ function Login({ setUser }) {
     }
   };
 
-  const loginWithCognito = () => {
-    const loginUrl =
-      `${COGNITO_DOMAIN}/oauth2/authorize` +
-      `?response_type=code` +
-      `&client_id=${CLIENT_ID}` +
-      `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
-      `&scope=${encodeURIComponent("openid email profile")}`;
+  const loginWithCognito = async () => {
+    try {
+      setError("");
 
-    window.location.href = loginUrl;
+      const state = generateRandomString(32);
+      const codeVerifier = generateRandomString(96);
+      const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+      sessionStorage.setItem("cognito_auth_state", state);
+      sessionStorage.setItem("pkce_code_verifier", codeVerifier);
+
+      const loginUrl =
+        `${COGNITO_DOMAIN}/oauth2/authorize` +
+        `?response_type=code` +
+        `&client_id=${encodeURIComponent(CLIENT_ID)}` +
+        `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+        `&scope=${encodeURIComponent("openid email profile")}` +
+        `&state=${encodeURIComponent(state)}` +
+        `&code_challenge_method=S256` +
+        `&code_challenge=${encodeURIComponent(codeChallenge)}` +
+        `&prompt=login`;
+
+      window.location.href = loginUrl;
+    } catch {
+      setError("Unable to start login. Please try again.");
+    }
   };
 
   return (
