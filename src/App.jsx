@@ -7,11 +7,7 @@ function App() {
 
   return (
     <div style={{ padding: "30px", fontFamily: "Arial" }}>
-      {!user ? (
-        <Login setUser={setUser} />
-      ) : (
-        <SqlOptimizer user={user} />
-      )}
+      <SqlOptimizer/>
     </div>
   );
 }
