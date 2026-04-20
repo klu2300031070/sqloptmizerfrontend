@@ -1,8 +1,5 @@
-import { useState } from "react";
-import { GoogleLogin } from "@react-oauth/google";
-import { jwtDecode } from "jwt-decode";
+import { useEffect, useState } from "react";
 import PropTypes from "prop-types";
-
 import {
   Box,
   Card,
@@ -11,22 +8,80 @@ import {
   Container,
   Alert,
   Fade,
+  Button,
+  CircularProgress,
 } from "@mui/material";
+
+const CLIENT_ID = "2nvo1g2bkegtrua3tir9q4bsng";
+const REDIRECT_URI = "https://main.d30lc4vxybk6pg.amplifyapp.com/";
+const COGNITO_DOMAIN = "https://us-east-1wvpsr47h7.auth.us-east-1.amazoncognito.com";
 
 function Login({ setUser }) {
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSuccess = (credentialResponse) => {
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("code");
+
+    if (code) {
+      exchangeCodeForToken(code);
+    }
+  }, []);
+
+  const exchangeCodeForToken = async (code) => {
+    setLoading(true);
+    setError("");
+
     try {
-      const decoded = jwtDecode(credentialResponse.credential);
-      setUser(decoded);
+      const body = new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: CLIENT_ID,
+        code,
+        redirect_uri: REDIRECT_URI,
+      });
+
+      const response = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: body.toString(),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error_description || "Token exchange failed.");
+      }
+
+      localStorage.setItem("access_token", data.access_token || "");
+      localStorage.setItem("id_token", data.id_token || "");
+      localStorage.setItem("refresh_token", data.refresh_token || "");
+
+      setUser({
+        isAuthenticated: true,
+        accessToken: data.access_token,
+        idToken: data.id_token,
+      });
+
+      window.history.replaceState({}, document.title, "/");
     } catch (err) {
-      setError("Failed to decode login response.");
+      setError(err.message || "Login failed.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleError = () => {
-    setError("Google Login Failed. Please try again.");
+  const loginWithGoogle = () => {
+    const loginUrl =
+      `${COGNITO_DOMAIN}/oauth2/authorize` +
+      `?response_type=code` +
+      `&client_id=${CLIENT_ID}` +
+      `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+      `&scope=${encodeURIComponent("openid email profile")}` +
+      `&identity_provider=Google`;
+
+    window.location.href = loginUrl;
   };
 
   return (
@@ -57,30 +112,37 @@ function Login({ setUser }) {
             }}
           >
             <CardContent>
-              <Typography
-                variant="h4"
-                fontWeight="bold"
-                gutterBottom
-              >
-                Welcome to Snowflake Optimizer ❄
+              <Typography variant="h4" fontWeight="bold" gutterBottom color="white">
+                Welcome to SQL AI Optimizer ❄
               </Typography>
 
-              <Typography
-                variant="body1"
-                sx={{ mb: 3, color: "gray" }}
-              >
+              <Typography variant="body1" sx={{ mb: 3, color: "#cbd5e1" }}>
                 Sign in with Google to continue
               </Typography>
 
               <Box display="flex" justifyContent="center">
-                <GoogleLogin
-                  onSuccess={handleSuccess}
-                  onError={handleError}
-                  theme="filled_blue"
+                <Button
+                  variant="contained"
                   size="large"
-                  shape="pill"
-                />
+                  onClick={loginWithGoogle}
+                  disabled={loading}
+                  sx={{
+                    px: 4,
+                    py: 1.5,
+                    borderRadius: "999px",
+                    fontWeight: "bold",
+                    textTransform: "none",
+                  }}
+                >
+                  {loading ? "Signing in..." : "Sign in with Google"}
+                </Button>
               </Box>
+
+              {loading && (
+                <Box mt={3} display="flex" justifyContent="center">
+                  <CircularProgress />
+                </Box>
+              )}
 
               {error && (
                 <Alert severity="error" sx={{ mt: 3 }}>
